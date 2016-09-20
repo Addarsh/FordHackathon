@@ -1,5 +1,7 @@
-#Script to integrate ultrasonic sensors
-#with a raspberry pi
+#Ford Hackathon project: Smart Parking lot detection
+#Script to integrate ultrasonic sensors (used to detect parking spot)
+#with a raspberry pi. The data from the sensors is sent over WiFi to 
+#to a Web server hosted on a 
 #Author: Addarsh Chandrasekar
 
 #Function to trigger interrupt on Arduino
@@ -202,4 +204,5 @@ if __name__ == "__main__":
 
   call_arduino()
   GPIO.cleanup()
+  shutdown() #Shutdown the raspberry pi
 
