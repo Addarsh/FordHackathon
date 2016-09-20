@@ -1,16 +1,28 @@
+/*
+ * Code for the different sleep modes of the Arduino.
+ * When the raspberry Pi is powered on, the Arduino is in sleep.
+ * When the Pi shuts down, the Arduino wakes up from sleep and goes
+ * into a new sleep mode where its wake up is triggered by a timer
+ * interrupt.
+ * Author: Addarsh Chandrasekar
+ */
 #include <avr/sleep.h>
 #include <avr/power.h>
 #include <avr/wdt.h>
 
 
 #define LED_PIN (13)
-#define REBOOT_PIN 7
-int pin2 = 2;
-volatile int sleepMode = 0; //0 means mode is external sleep
-                   //1 means mode is watchdog sleep
+#define BOOT_PIN 7
+int pin2 = 2; //Pin used to trigger external interrupt
+
+//Arduino under two different sleep modes,
+//One where it wakes up on an external interrupt 
+//Other one where it wakes up on timer interrupt
+volatile int sleepMode = 0; //state: 0 - mode is external sleep
+                            //state 1: mode is watchdog sleep
 volatile int f_wdt=1;
 int timeelapsed = 0;
-int newdaytime = 24;
+int newdaytime = 24; //The Arduino timer interrupt reset time
 volatile int int_count = 0;
 /***************************************************
  *  Name:        ISR(WDT_vect)
@@ -32,19 +44,19 @@ ISR(WDT_vect)
 }
 
 /***************************************************
- *  Name:        rebootPi
+ *  Name:        bootPi
  *
  *  Returns:     Nothing.
  *
  *  Parameters:  None.
  *
- *  Description: Resets the raspberry pi
+ *  Description: Restarts the raspberry pi
  *
  ***************************************************/
-void rebootPi(void){
-  digitalWrite(REBOOT_PIN,HIGH);
+void bootPi(void){
+  digitalWrite(BOOT_PIN,HIGH);
   delay(100);
-  digitalWrite(REBOOT_PIN,LOW);
+  digitalWrite(BOOT_PIN,LOW);
 }
 
 
@@ -79,8 +91,8 @@ void enterSleepWatch(void)
 
   if(timeelapsed == newdaytime){
     timeelapsed = 0;
-    //Reboot the raspberry pi
-    rebootPi();
+    //BOOT the raspberry pi
+    bootPi();
     
     sleepMode = 0; //Go back to inetrrupt mode
     delay(100);
@@ -100,16 +112,13 @@ void enterSleepWatch(void)
  *
  ***************************************************/
 void pin2Interrupt(void)
-{
-  /* This will bring us back from sleep. */
-  
+{ 
   /* We detach the interrupt to stop it from 
    * continuously firing while the interrupt pin
    * is low.
    */
   detachInterrupt(0);
   int_count++;
-  //Serial.println("ok");
   if(int_count == 1){
     int_count = 0;
     sleepMode = 1;
@@ -132,24 +141,20 @@ void enterSleep(void)
   //Disable watch timer
    WDTCSR &= ~_BV(WDIE);
   
-  /* Setup pin2 as an interrupt and attach handler. */
+  //Attach interrupt to pin 2
   attachInterrupt(0, pin2Interrupt, LOW);
   delay(100);
   
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
   
   sleep_enable();
- 
+
+  //Enter sleep
   sleep_mode();
   
-  /* The program will continue from here. */
   
-  /* First thing to do is disable sleep. */
+  //Disable sleep after exiting sleep mode
   sleep_disable();
-
-  /*Serial.println("ow");
-  Serial.print(int_count);
-  Serial.print("\n");*/
 
   delay(200);
 }
@@ -162,27 +167,21 @@ void enterSleep(void)
  *
  *  Parameters:  None.
  *
- *  Description: Setup for the serial comms and the
- *                Watch dog timeout. 
+ *  Description: Setup watch dog timer 
  *
  ***************************************************/
 void wdt_setup()
 {
-  /*** Setup the WDT ***/
   
-  /* Clear the reset flag. */
+  // Clear the reset flag
   MCUSR &= ~(1<<WDRF);
   
-  /* In order to change WDE or the prescaler, we need to
-   * set WDCE (This will allow updates for 4 clock cycles).
-   */
+  //Set WDCE to change prescalar
   WDTCSR |= (1<<WDCE) | (1<<WDE);
 
-  /* set new watchdog timeout prescaler value */
-  WDTCSR = 1<<WDP0 | 1<<WDP3; /* 8.0 seconds */
+  //Set watchdog timer prescalar so timeout = 8 s
+  WDTCSR = 1<<WDP0 | 1<<WDP3; 
   
-  /* Enable the WD interrupt (note no reset). */
-  //WDTCSR |= _BV(WDIE);
 }
 
 
@@ -198,15 +197,16 @@ void wdt_setup()
  ***************************************************/
 void setup()
 {  
-  /* Setup the pin direction. */
+  //Set up pin directions
   pinMode(pin2, INPUT);
   pinMode(LED_PIN,OUTPUT);
 
+  //Watch dog timer setup
   wdt_setup();
 
   //Set reset pin to output mode
-  pinMode(REBOOT_PIN,OUTPUT);
-  digitalWrite(REBOOT_PIN,LOW);
+  pinMode(BOOT_PIN,OUTPUT);
+  digitalWrite(BOOT_PIN,LOW);
 
 }
 
@@ -229,7 +229,8 @@ void loop()
     digitalWrite(LED_PIN, !digitalRead(LED_PIN));
     delay(1000);
     seconds++;
-  
+
+    //Wait for 2 more seconds before going to sleep
     if(seconds == 2)
     {
       delay(200);
@@ -239,13 +240,13 @@ void loop()
   } else{
     if(f_wdt == 1)
     {
-      /* Toggle the LED */
+      //Toggle LED
       digitalWrite(LED_PIN, !digitalRead(LED_PIN));
     
-      /* Don't forget to clear the flag. */
+      //Clear flag
       f_wdt = 0;
     
-      /* Re-enter sleep mode. */
+      //Enter sleep mode under watch dog timer interrupt
       enterSleepWatch();
     }
   }

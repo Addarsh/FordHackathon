@@ -202,5 +202,4 @@ if __name__ == "__main__":
 
   call_arduino()
   GPIO.cleanup()
-  shutdown() #Shutdown the raspberry pi
 
